@@ -18,12 +18,12 @@ async def create_transaction(
     request: TransactionRequest,
     service: TransactionService = Depends(get_transaction_service),
 ):
-    logger.info(f"Requisição de transação recebida, external_id: {request.external_id}")
+    logger.info(f"Requisição de transação recebida, external_id={request.external_id}")
 
     transaction = Transaction(
         external_id=request.external_id, amount=request.amount, kind=request.kind
     )
 
-    transaction = service.create_transaction(transaction)
+    transaction = await service.create_transaction(transaction)
 
     return TransactionResponse.model_validate(transaction)
