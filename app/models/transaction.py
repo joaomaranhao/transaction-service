@@ -14,7 +14,7 @@ class Transaction(SQLModel, table=True):
     __tablename__: str = "transactions"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    external_id: uuid.UUID = Field(index=True)
+    external_id: uuid.UUID = Field(index=True, unique=True)
     amount: float
     kind: KindEnum
     status: str = Field(default="pending")
