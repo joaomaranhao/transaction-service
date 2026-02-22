@@ -1,4 +1,4 @@
-from app.core.exceptions import BankPartnerError
+from app.core.exceptions import BankPartnerError, InvalidTransactionAmountError
 from app.core.logger import logger
 from app.integrations.bank_partner import bank_partner_request
 from app.models.transaction import Transaction
@@ -20,6 +20,13 @@ class TransactionService:
                 f"Transação com external_id={transaction.external_id} já existe, retornando transação existente"
             )
             return existing_transaction
+
+        # Valida valor da transação
+        if transaction.amount <= 0:
+            logger.error(
+                f"Valor de transação inválido, external_id={transaction.external_id}, amount={transaction.amount}"
+            )
+            raise InvalidTransactionAmountError()
 
         # Cria nova transação
         logger.info(f"Criando nova transação, external_id={transaction.external_id}")
