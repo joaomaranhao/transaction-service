@@ -1,3 +1,4 @@
+from app.core.exceptions import BankPartnerError
 from app.core.logger import logger
 from app.integrations.bank_partner import bank_partner_request
 from app.models.transaction import Transaction
@@ -25,23 +26,28 @@ class TransactionService:
         transaction.status = "pending"
         transaction = self.repository.create(transaction)
 
-        # Envia transação para banco parceiro
-        logger.info(
-            f"Enviando transação para banco parceiro, external_id={transaction.external_id}"
-        )
-        partner_id = await bank_partner_request(
-            external_id=transaction.external_id,
-            amount=transaction.amount,
-            kind=transaction.kind,
-        )
-        logger.info(
-            f"Resposta do banco parceiro recebida, partner_id={partner_id}, external_id={transaction.external_id}"
-        )
-        transaction.partner_id = partner_id
-        transaction.status = "completed"
-        transaction = self.repository.update(transaction)
-        logger.info(
-            f"Transação completada, external_id={transaction.external_id}, partner_id={transaction.partner_id}"
-        )
+        try:
+            # Envia transação para banco parceiro
+            logger.info(
+                f"Enviando transação para banco parceiro, external_id={transaction.external_id}"
+            )
+            partner_id = await bank_partner_request(
+                external_id=transaction.external_id,
+                amount=transaction.amount,
+                kind=transaction.kind,
+            )
+            logger.info(
+                f"Resposta do banco parceiro recebida, partner_id={partner_id}, external_id={transaction.external_id}"
+            )
+            transaction.partner_id = partner_id
+            transaction.status = "completed"
+            transaction = self.repository.update(transaction)
+            logger.info(
+                f"Transação completada, external_id={transaction.external_id}, partner_id={transaction.partner_id}"
+            )
+        except BankPartnerError:
+            logger.error(
+                f"Erro ao processar transação no banco parceiro, external_id={transaction.external_id}"
+            )
 
         return transaction
