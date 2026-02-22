@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends
 
-from app.dependencies import get_transaction_repository
+from app.dependencies import get_transaction_service
 from app.models.transaction import Transaction
-from app.repositories.transaction_repository import TransactionRepository
 from app.schemas.transaction import TransactionRequest, TransactionResponse
+from app.services.transaction_service import TransactionService
 
 router = APIRouter()
 
@@ -15,13 +15,13 @@ router = APIRouter()
 )
 async def create_transaction(
     request: TransactionRequest,
-    repository: TransactionRepository = Depends(get_transaction_repository),
+    service: TransactionService = Depends(get_transaction_service),
 ):
 
     transaction = Transaction(
         external_id=request.external_id, amount=request.amount, kind=request.kind
     )
 
-    transaction = repository.create(transaction)
+    transaction = service.create_transaction(transaction)
 
     return TransactionResponse.model_validate(transaction)
