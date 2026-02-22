@@ -1,3 +1,4 @@
+from core.logger import logger
 from fastapi import APIRouter, Depends
 
 from app.dependencies import get_transaction_service
@@ -17,6 +18,7 @@ async def create_transaction(
     request: TransactionRequest,
     service: TransactionService = Depends(get_transaction_service),
 ):
+    logger.info(f"Requisição de transação recebida, external_id: {request.external_id}")
 
     transaction = Transaction(
         external_id=request.external_id, amount=request.amount, kind=request.kind
