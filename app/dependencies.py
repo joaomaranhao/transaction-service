@@ -16,3 +16,11 @@ def get_transaction_service(
     repository: TransactionRepository = Depends(get_transaction_repository),
 ):
     return TransactionService(repository)
+
+
+def get_account_service(
+    repository: TransactionRepository = Depends(get_transaction_repository),
+):
+    from app.services.account_services import AccountService
+
+    return AccountService(repository)

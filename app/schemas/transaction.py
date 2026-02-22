@@ -10,6 +10,7 @@ class TransactionRequest(BaseModel):
     external_id: uuid.UUID
     amount: float
     kind: KindEnum
+    account_id: str
 
 
 class TransactionResponse(BaseModel):

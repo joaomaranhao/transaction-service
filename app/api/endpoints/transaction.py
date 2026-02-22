@@ -21,7 +21,10 @@ async def create_transaction(
     logger.info(f"Requisição de transação recebida, external_id={request.external_id}")
 
     transaction = Transaction(
-        external_id=request.external_id, amount=request.amount, kind=request.kind
+        external_id=request.external_id,
+        amount=request.amount,
+        kind=request.kind,
+        account_id=request.account_id,
     )
 
     transaction = await service.create_transaction(transaction)

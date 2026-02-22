@@ -19,3 +19,5 @@ class Transaction(SQLModel, table=True):
     kind: KindEnum
     status: str = Field(default="pending")
     partner_id: str | None = Field(default=None, index=True)
+
+    account_id: str = Field(index=True)
