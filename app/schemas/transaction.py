@@ -16,3 +16,7 @@ class TransactionResponse(BaseModel):
 
     id: int
     status: str
+
+    model_config = {
+        "from_attributes": True,
+    }
