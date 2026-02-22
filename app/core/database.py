@@ -1,8 +1,12 @@
+from pathlib import Path
+
 from sqlmodel import Session, SQLModel, create_engine
 
 from app.core.config import settings
 from app.core.logger import logger
 from app.models.transaction import Transaction  # noqa: F401
+
+Path("data").mkdir(exist_ok=True)
 
 engine = create_engine(settings.database_url, echo=False)
 
