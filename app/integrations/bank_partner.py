@@ -13,17 +13,12 @@ async def bank_partner_request(
 ) -> str:
     """Simula integração com banco parceiro."""
     logger.info(
-        f"Enviando requisição para banco parceiro, external_id={external_id}, amount={amount}, kind={kind}"
+        f"Enviando requisição para banco parceiro, external_id={external_id}, amount={amount}, kind={kind.value}"  # type: ignore
     )
     await asyncio.sleep(0.2)
 
     # Simula erro aleatório do banco parceiro
     if random.random() < 0.3:
-        logger.error(
-            f"Erro ao processar transação no banco parceiro, external_id={external_id}"
-        )
-        raise BankPartnerError(
-            f"Erro ao processar transação no banco parceiro, external_id={external_id}"
-        )
+        raise BankPartnerError()
 
     return str(uuid.uuid4())
