@@ -7,7 +7,7 @@ from sqlmodel import Session
 from app.core.config import settings
 from app.core.database import engine
 from app.core.logger import logger
-from app.messaging.publisher import publish_to_retry
+from app.messaging.publisher import publish_to_dlq, publish_to_retry
 from app.repositories.transaction_repository import TransactionRepository
 from app.services.transaction_service import TransactionService
 
@@ -27,6 +27,9 @@ async def main():
             "x-dead-letter-routing-key": "transactions",
         },
     )
+
+    # Dead Letter Queue
+    await channel.declare_queue("transactions.dlq", durable=True)
 
     queue = await channel.declare_queue("transactions", durable=True)
 
@@ -68,8 +71,9 @@ async def main():
                             await publish_to_retry(transaction_id, retry_count + 1)
                         else:
                             logger.error(
-                                f"Máximo de retries atingido, transaction_id={transaction_id}"
+                                f"Máximo de retries atingido, enviando para DLQ, transaction_id={transaction_id}"
                             )
+                            await publish_to_dlq(transaction_id, retry_count, str(e))
 
 
 if __name__ == "__main__":

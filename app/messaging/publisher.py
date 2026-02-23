@@ -24,7 +24,7 @@ class RabbitMQPublisher:
 
     @classmethod
     async def _setup_queues(cls, channel: AbstractChannel) -> None:
-        """Configura filas principal e de retry com DLX."""
+        """Configura filas principal, retry e DLQ."""
         # Fila de retry: mensagens expiram e voltam para transactions
         await channel.declare_queue(
             "transactions.retry",
@@ -38,6 +38,9 @@ class RabbitMQPublisher:
 
         # Fila principal
         await channel.declare_queue("transactions", durable=True)
+
+        # Dead Letter Queue: mensagens que falharam todas as tentativas
+        await channel.declare_queue("transactions.dlq", durable=True)
 
     @classmethod
     async def close(cls) -> None:
@@ -78,4 +81,25 @@ async def publish_to_retry(transaction_id: int, retry_count: int):
     await channel.default_exchange.publish(
         message,
         routing_key="transactions.retry",
+    )
+
+
+async def publish_to_dlq(transaction_id: int, retry_count: int, error: str):
+    """Publica transação na DLQ após esgotar tentativas."""
+    channel = await RabbitMQPublisher.get_channel()
+
+    message = aio_pika.Message(
+        body=json.dumps(
+            {
+                "transaction_id": transaction_id,
+                "error": error,
+            }
+        ).encode(),
+        delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
+        headers={"x-retry-count": retry_count},
+    )
+
+    await channel.default_exchange.publish(
+        message,
+        routing_key="transactions.dlq",
     )
