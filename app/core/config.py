@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     debug: bool = False
     log_level: str = "INFO"
     database_url: str = "sqlite:///./data/database.db"
+    rabbitmq_url: str = "amqp://guest:guest@localhost:5672/"
 
     model_config = SettingsConfigDict(
         env_file=".env",

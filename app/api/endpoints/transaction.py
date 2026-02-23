@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from app.core.exceptions import InvalidTransactionAmountError
 from app.core.logger import logger
@@ -16,12 +16,15 @@ router = APIRouter()
     status_code=status.HTTP_201_CREATED,
     tags=["Transactions"],
     responses={
+        200: {"description": "Transação já existente retornada"},
+        201: {"description": "Transação criada com sucesso"},
         400: {"description": "Valor de transação inválido"},
         500: {"description": "Erro interno do servidor"},
     },
 )
 async def create_transaction(
     request: TransactionRequest,
+    response: Response,
     service: TransactionService = Depends(get_transaction_service),
 ):
     logger.info(f"Requisição de transação recebida, external_id={request.external_id}")
@@ -34,7 +37,10 @@ async def create_transaction(
     )
 
     try:
-        transaction = await service.create_transaction(transaction)
+        transaction, created = await service.create_transaction(transaction)
+
+        if not created:
+            response.status_code = status.HTTP_200_OK
 
         return TransactionResponse.model_validate(transaction)
     except InvalidTransactionAmountError:

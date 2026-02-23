@@ -1,6 +1,7 @@
-from app.core.exceptions import BankPartnerError, InvalidTransactionAmountError
+from app.core.exceptions import InvalidTransactionAmountError
 from app.core.logger import logger
 from app.integrations.bank_partner import bank_partner_request
+from app.messaging.publisher import publish_transaction
 from app.models.transaction import Transaction
 from app.repositories.transaction_repository import TransactionRepository
 
@@ -10,7 +11,15 @@ class TransactionService:
     def __init__(self, repository: TransactionRepository):
         self.repository = repository
 
-    async def create_transaction(self, transaction: Transaction) -> Transaction:
+    async def create_transaction(
+        self, transaction: Transaction
+    ) -> tuple[Transaction, bool]:
+        """
+        Cria uma nova transação ou retorna existente.
+
+        Returns:
+            tuple[Transaction, bool]: (transação, foi_criada)
+        """
         # Verifica se já existe uma transação com o mesmo external_id
         existing_transaction = self.repository.get_by_external_id(
             transaction.external_id
@@ -19,7 +28,7 @@ class TransactionService:
             logger.info(
                 f"Transação com external_id={transaction.external_id} já existe, retornando transação existente"
             )
-            return existing_transaction
+            return existing_transaction, False
 
         # Valida valor da transação
         if transaction.amount <= 0:
@@ -33,28 +42,48 @@ class TransactionService:
         transaction.status = "pending"
         transaction = self.repository.create(transaction)
 
-        try:
-            # Envia transação para banco parceiro
+        # Publica transação para processamento assíncrono
+        if transaction.id is not None:
+            await publish_transaction(transaction.id)
+            logger.info(f"Transação publicada para processamento, id={transaction.id}")
+
+        return transaction, True
+
+    async def process_transaction(self, transaction_id: int) -> None:
+        transaction = self.repository.get_by_id(transaction_id)
+
+        if not transaction:
+            logger.error(f"Transação não encontrada, id={transaction_id}")
+            return
+
+        if transaction.status != "pending":
             logger.info(
-                f"Enviando transação para banco parceiro, external_id={transaction.external_id}"
+                f"Transação id={transaction_id} já processada, status={transaction.status}"
             )
+            return
+
+        try:
+            logger.info(f"Processando transação id={transaction_id}")
+
+            # Mudar status para processing para evitar processamento concorrente
+            transaction.status = "processing"
+            self.repository.update(transaction)
+
             partner_id = await bank_partner_request(
                 external_id=transaction.external_id,
                 amount=transaction.amount,
                 kind=transaction.kind,
             )
-            logger.info(
-                f"Resposta do banco parceiro recebida, partner_id={partner_id}, external_id={transaction.external_id}"
-            )
-            transaction.partner_id = partner_id
             transaction.status = "completed"
-            transaction = self.repository.update(transaction)
+            transaction.partner_id = partner_id
+            self.repository.update(transaction)
             logger.info(
-                f"Transação completada, external_id={transaction.external_id}, partner_id={transaction.partner_id}"
+                f"Transação id={transaction_id} processada com sucesso, status={transaction.status}"
             )
-        except BankPartnerError:
-            logger.error(
-                f"Erro ao processar transação no banco parceiro, external_id={transaction.external_id}"
+        except Exception as e:
+            logger.error(f"Erro ao processar transação id={transaction_id}: {e}")
+            transaction.status = "failed"
+            self.repository.update(transaction)
+            logger.info(
+                f"Transação id={transaction_id} falhou, status={transaction.status}"
             )
-
-        return transaction

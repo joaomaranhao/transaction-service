@@ -5,6 +5,35 @@ services:
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: sqlite:///data/db.sqlite3
+      - DATABASE_URL=sqlite:////data/database.db
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
     volumes:
       - ./data:/data
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq-server
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+  worker:
+    build: .
+    container_name: transactions_worker
+    command: ["uv", "run", "python", "-m", "app.worker"]
+    restart: on-failure
+    environment:
+      - DATABASE_URL=sqlite:////data/database.db
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+    volumes:
+      - ./data:/data
+    depends_on:
+      rabbitmq:
+        condition: service_healthy

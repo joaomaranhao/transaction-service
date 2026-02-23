@@ -6,6 +6,7 @@ from app.api.routes import router
 from app.core.config import settings
 from app.core.database import init_db
 from app.core.logger import logger
+from app.messaging.publisher import RabbitMQPublisher
 
 
 @asynccontextmanager
@@ -15,6 +16,7 @@ async def lifespan(app: FastAPI):
     init_db()
     yield
     logger.info("Encerrando o serviço de transações...")
+    await RabbitMQPublisher.close()
 
 
 app = FastAPI(

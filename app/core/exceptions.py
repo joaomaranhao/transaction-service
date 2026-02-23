@@ -1,7 +1,9 @@
 class BankPartnerError(Exception):
     """Exceção para erros relacionados ao banco parceiro."""
 
-    pass
+    def __init__(self, message: str = "Erro na comunicação com banco parceiro"):
+        self.message = message
+        super().__init__(self.message)
 
 
 class AccountNotFoundError(Exception):
