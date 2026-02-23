@@ -12,6 +12,9 @@ wheels/
 # VSCode settings
 .vscode/
 
+# Environment files
+.env.local
+
 # Logs
 logs/
 
