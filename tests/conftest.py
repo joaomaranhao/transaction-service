@@ -1,3 +1,5 @@
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.pool import StaticPool
@@ -29,6 +31,11 @@ def client(session):
 
     app.dependency_overrides[get_session] = override_get_session
 
-    yield TestClient(app)
+    # Mock do publisher para não depender do RabbitMQ
+    with patch(
+        "app.services.transaction_service.publish_transaction",
+        new_callable=AsyncMock,
+    ):
+        yield TestClient(app)
 
     app.dependency_overrides.clear()

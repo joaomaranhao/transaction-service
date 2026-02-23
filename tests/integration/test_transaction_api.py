@@ -22,7 +22,7 @@ class TestCreateTransaction:
 
         data = response.json()
         assert "id" in data
-        assert data["status"] == "completed"
+        assert data["status"] == "pending"
 
     def test_create_debit_transaction(self, client):
         """Deve criar uma transação de débito com sucesso"""
@@ -40,7 +40,7 @@ class TestCreateTransaction:
 
         data = response.json()
         assert "id" in data
-        assert data["status"] == "completed"
+        assert data["status"] == "pending"
 
     def test_create_transaction_with_zero_amount(self, client):
         """Deve retornar 400 para transação com valor zero"""
@@ -99,7 +99,7 @@ class TestCreateTransaction:
                 "account_id": "2",  # conta diferente
             },
         )
-        assert response2.status_code == 201
+        assert response2.status_code == 200  # 200 para existente, não 201
         data2 = response2.json()
 
         # Deve retornar a mesma transação (idempotência)

@@ -2,23 +2,32 @@ import uuid
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from sqlmodel import select
-
-from app.models.transaction import Transaction
 
 
-class TestTransactionWithBankPartner:
-    """Testes de integração da transação com o banco parceiro"""
+class TestCreateTransactionWithMessaging:
+    """Testes de integração da criação de transação com mensageria"""
 
-    def test_transaction_completed_when_bank_partner_succeeds(self, client):
-        """Transação deve ser completada quando banco parceiro responde com sucesso"""
-        partner_id = str(uuid.uuid4())
+    def test_transaction_created_with_pending_status(self, client):
+        """Transação deve ser criada com status pending"""
+        response = client.post(
+            "/transaction",
+            json={
+                "external_id": str(uuid.uuid4()),
+                "amount": 100,
+                "kind": "credit",
+                "account_id": "1",
+            },
+        )
 
+        assert response.status_code == 201
+        assert response.json()["status"] == "pending"
+
+    def test_publish_called_on_transaction_creation(self, client, session):
+        """Deve publicar transação na fila após criar"""
         with patch(
-            "app.services.transaction_service.bank_partner_request",
+            "app.services.transaction_service.publish_transaction",
             new_callable=AsyncMock,
-            return_value=partner_id,
-        ):
+        ) as mock_publish:
             response = client.post(
                 "/transaction",
                 json={
@@ -29,72 +38,18 @@ class TestTransactionWithBankPartner:
                 },
             )
 
-        assert response.status_code == 201
-        assert response.json()["status"] == "completed"
+            assert response.status_code == 201
+            transaction_id = response.json()["id"]
+            mock_publish.assert_called_once_with(transaction_id)
 
-    def test_transaction_pending_when_bank_partner_fails(self, client, session):
-        """Transação deve ficar pendente quando banco parceiro falha"""
-        from app.core.exceptions import BankPartnerError
-
+    def test_publish_not_called_for_duplicate(self, client):
+        """Não deve publicar para transação duplicada"""
         external_id = str(uuid.uuid4())
 
         with patch(
-            "app.services.transaction_service.bank_partner_request",
+            "app.services.transaction_service.publish_transaction",
             new_callable=AsyncMock,
-            side_effect=BankPartnerError("Erro no banco parceiro"),
-        ):
-            response = client.post(
-                "/transaction",
-                json={
-                    "external_id": external_id,
-                    "amount": 100,
-                    "kind": "credit",
-                    "account_id": "1",
-                },
-            )
-
-        # Transação é criada mas não completada
-        assert response.status_code == 201
-
-        transaction = session.exec(select(Transaction)).first()
-        assert transaction is not None
-        assert transaction.status == "pending"
-        assert transaction.partner_id is None
-
-    def test_bank_partner_receives_correct_parameters(self, client):
-        """Banco parceiro deve receber os parâmetros corretos"""
-        external_id = uuid.uuid4()
-
-        with patch(
-            "app.services.transaction_service.bank_partner_request",
-            new_callable=AsyncMock,
-            return_value=str(uuid.uuid4()),
-        ) as mock_bank_partner:
-            client.post(
-                "/transaction",
-                json={
-                    "external_id": str(external_id),
-                    "amount": 150.50,
-                    "kind": "debit",
-                    "account_id": "123",
-                },
-            )
-
-            mock_bank_partner.assert_called_once()
-            call_kwargs = mock_bank_partner.call_args.kwargs
-
-            assert call_kwargs["amount"] == 150.50
-            assert call_kwargs["kind"] == "debit"
-
-    def test_bank_partner_not_called_for_duplicate_transaction(self, client):
-        """Banco parceiro não deve ser chamado para transação duplicada"""
-        external_id = str(uuid.uuid4())
-
-        with patch(
-            "app.services.transaction_service.bank_partner_request",
-            new_callable=AsyncMock,
-            return_value=str(uuid.uuid4()),
-        ) as mock_bank_partner:
+        ) as mock_publish:
             # Primeira requisição
             client.post(
                 "/transaction",
@@ -117,15 +72,15 @@ class TestTransactionWithBankPartner:
                 },
             )
 
-            # Banco parceiro só deve ser chamado uma vez
-            assert mock_bank_partner.call_count == 1
+            # Publish só deve ser chamado uma vez
+            assert mock_publish.call_count == 1
 
-    def test_bank_partner_not_called_for_invalid_amount(self, client):
-        """Banco parceiro não deve ser chamado para transação com valor inválido"""
+    def test_publish_not_called_for_invalid_amount(self, client):
+        """Não deve publicar para transação com valor inválido"""
         with patch(
-            "app.services.transaction_service.bank_partner_request",
+            "app.services.transaction_service.publish_transaction",
             new_callable=AsyncMock,
-        ) as mock_bank_partner:
+        ) as mock_publish:
             client.post(
                 "/transaction",
                 json={
@@ -136,8 +91,7 @@ class TestTransactionWithBankPartner:
                 },
             )
 
-            # Banco parceiro não deve ser chamado
-            mock_bank_partner.assert_not_called()
+            mock_publish.assert_not_called()
 
 
 class TestBankPartnerUnit:
@@ -147,13 +101,14 @@ class TestBankPartnerUnit:
     async def test_bank_partner_returns_uuid(self):
         """bank_partner_request deve retornar um UUID válido quando sucesso"""
         from app.integrations.bank_partner import bank_partner_request
+        from app.models.transaction import KindEnum
 
         # Mocka random para garantir sucesso (> 0.3)
         with patch("app.integrations.bank_partner.random.random", return_value=0.5):
             result = await bank_partner_request(
                 external_id=uuid.uuid4(),
                 amount=100,
-                kind="credit",
+                kind=KindEnum.CREDIT,
             )
 
         # Resultado deve ser um UUID válido
@@ -164,6 +119,7 @@ class TestBankPartnerUnit:
         """bank_partner_request deve levantar BankPartnerError quando falha"""
         from app.core.exceptions import BankPartnerError
         from app.integrations.bank_partner import bank_partner_request
+        from app.models.transaction import KindEnum
 
         # Mocka random para garantir falha (< 0.3)
         with patch("app.integrations.bank_partner.random.random", return_value=0.1):
@@ -171,5 +127,5 @@ class TestBankPartnerUnit:
                 await bank_partner_request(
                     external_id=uuid.uuid4(),
                     amount=100,
-                    kind="credit",
+                    kind=KindEnum.CREDIT,
                 )
