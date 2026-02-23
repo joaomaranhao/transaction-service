@@ -49,14 +49,16 @@ class TransactionService:
 
         return transaction, True
 
-    async def process_transaction(self, transaction_id: int) -> None:
+    async def process_transaction(
+        self, transaction_id: int, is_last_attempt: bool = False
+    ) -> None:
         transaction = self.repository.get_by_id(transaction_id)
 
         if not transaction:
             logger.error(f"Transação não encontrada, id={transaction_id}")
             return
 
-        if transaction.status != "pending":
+        if transaction.status not in ("pending", "processing"):
             logger.info(
                 f"Transação id={transaction_id} já processada, status={transaction.status}"
             )
@@ -82,8 +84,16 @@ class TransactionService:
             )
         except Exception as e:
             logger.error(f"Erro ao processar transação id={transaction_id}: {e}")
-            transaction.status = "failed"
-            self.repository.update(transaction)
-            logger.info(
-                f"Transação id={transaction_id} falhou, status={transaction.status}"
-            )
+
+            if is_last_attempt:
+                transaction.status = "failed"
+                self.repository.update(transaction)
+                logger.info(
+                    f"Transação id={transaction_id} falhou definitivamente, status={transaction.status}"
+                )
+            else:
+                # Volta para pending para permitir retry
+                transaction.status = "pending"
+                self.repository.update(transaction)
+
+            raise
